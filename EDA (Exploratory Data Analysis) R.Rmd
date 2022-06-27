@@ -1,0 +1,197 @@
+---
+title: "Ejercicio 2 – EDA (Exploratory Data Analysis) R"
+output:
+  html_document:
+    df_print: paged
+autor: Pedro Cortés Soberanes
+---
+
+```{r}
+# Importamos librerías a utilizar
+library(magrittr) 
+library(dplyr) 
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(plotly)
+```
+
+
+1. Lee todos los archivos como dataframes
+
+```{r}
+# Leemos los 5 dataframes, utilizando dos diferentes encodings para poder leer bien los caracteres 
+df2017 <- read.csv("activaciones_samur_2017.csv", sep=";", encoding = "latin1")
+df2018 <- read.csv("activaciones_samur_2018.csv", sep=";", encoding = "latin1")
+df2019 <- read.csv("activaciones_samur_2019.csv", sep=";", encoding = "latin1")
+df2020 <- read.csv("activaciones_samur_2020.csv", sep=";", encoding = "utf-8")
+df2021 <- read.csv("activaciones_samur_2021.csv", sep=";", encoding = "utf-8")
+```
+
+2. Concatena todos los dataframes en uno nuevo que englobe todos los años.
+
+```{r}
+# Utilizando rbind concatenamos los 5 datafremes en nuestro dataframe global llamado df
+df <- rbind(df2017,df2018,df2019,df2020,df2021)
+```
+
+3. Modifica los tipos de las columnas:
+
+```{r}
+# Modificamos los tipos de columnas en nuestro dataframe con la funcion as.
+df$Año <- as.integer(df$Año)
+df$Mes <- as.factor(df$Mes)
+df$Hora.Solicitud <- as.character(df$Hora.Solicitud)
+df$Hora.Intervención <- as.character(df$Hora.Intervención)
+df$Código <- as.character(df$Código)
+df$Distrito <- as.factor(df$Distrito)
+df$Hospital <- as.factor(df$Hospital)
+```
+```{r}
+df
+```
+
+4. Agrupa el dataframe por el código de la urgencia, ¿Cuáles son los tres códigos de urgencia más habituales? ¿Cuáles son los tres menos habituales?
+
+```{r}
+# Agrupamos el datafrema utilizando un groupby por la columna Código y hacemos un conteo con summarise, posteriormente los ordenamos de forma descendente.
+
+# Utilizamos head(3) para mostras los tres primeros es decir los más habituales
+df %>%
+  group_by(Código) %>% 
+  summarise(Count = n()) %>% 
+  arrange(desc(Count)) %>%
+  head(3)
+
+# Utilizamos tail(3) para mostras los tres primeros es decir los menos habituales
+df %>%
+  group_by(Código) %>% 
+  summarise(Count = n()) %>% 
+  arrange(desc(Count)) %>%
+  tail(3)
+```
+5. Observa los valores únicos de la variable Distrito, parece que hay un nivel (categoría) que es una cadena de texto vacía, asigna valor nulo a todas las cadenas de texto vacías para esta variable, ¿cuántos nulos aparecen? Elimina todos los valores nulos que hayan aparecido a raíz de esta transformación.
+
+```{r}
+# Realizamos una copia de nuestro dataframe 
+df_new <- df
+# Cambiamos todos las cadenas vacias a nulos (NA)
+df_new[df_new==""] <- NA
+```
+
+```{r}
+# Hacemos un conteo de los valores nulos 
+sum(is.na(df_new$Distrito))
+```
+
+```{r}
+# Eliminamos todos los valores nulos y realizamos de nuevo un conteo
+df_new<-df_new[!is.na(df_new$Distrito),]
+sum(is.na(df_new$Distrito))
+```
+
+6. Muestra los valores únicos de la variable Hospital, si hay algún factor que este vacío o que indique valor nulo, esto querrá decir que esa urgencia no requirió de hospitalización, para todos estos casos crea un nuevo factor o categoría que sea NO_HOSPITAL ¿cuántos casos hay en el dataframe que no requirieron de hospitalización?
+
+```{r}
+# Realizamos un cambio a todos los valores vacios a una nueva categoría denominada "NO_HOSPITAL" en el proceso convertimos nuestra variable a caracter para realizar el cambio y posteriormente la regresmoas a factor
+df_new$Hospital <- as.character(df_new$Hospital)
+df_new$Hospital[is.na(df_new$Hospital)]<-"NO_HOSPITAL"
+df_new$Hospital <- as.factor(df_new$Hospital)
+
+# Hacemos un conteo de los casos que no fueron a hospital
+df_new %>%
+  group_by(Hospital) %>% 
+  summarise(Casos = n()) %>% 
+  arrange(desc(Casos)) %>% 
+  head(1)
+```
+
+7. Filtra el dataframe por todos los niveles distintos de NO_HOSPITAL, muestra los tres hospitales a los que más ciudadanos hayan sido trasladados
+
+```{r}
+# Realizamos un dataframe nuevo sin los casos de "NO_HOSPITAL"
+df7<-df_new[!(df_new$Hospital== "NO_HOSPITAL"),]
+
+# Realizamos una agrupacion y conteo con los 3 hospitales que tienen mas casos.
+df7 %>%
+  group_by(Hospital) %>% 
+  summarise(Casos = n()) %>% 
+  arrange(desc(Casos)) %>% 
+  head(3)
+```
+8. Agrupa el dataframe por la media de casos que se reciben al mes para cada año ¿En qué año se realizaron más activaciones del SAMUR?
+
+```{r}
+# Realizamos un groupby tanto por mes y por año sacando la media anual y asi teniendo como resultado en que año se realizaron mas activaciones SAMUR
+df_new %>%
+  group_by(Año, Mes) %>% 
+  summarise(total_mes = n()) %>% 
+  summarise(media_año=round(sum(total_mes)/12)) %>% 
+  arrange(desc(media_año)) %>% 
+  head(1)
+```
+
+9. Transforma la columna Hora.Solicitud en horas, minutos y segundos de solicitud, si aparece algún valor nulo elimínalo.
+
+```{r}
+# Separamos nuestra columna Hora.Solicitud en 3 columnas nuevas(hora,minutos,segundos) utilizando str_split_fixed 
+df_new<-df_new[!is.na(df_new$Hora.Solicitud),]
+df_time <- df_new
+df_time[c("hora","minutos","segundos")] <- str_split_fixed(df_time$Hora.Solicitud, ':', 3)
+df_time
+```
+
+10. ¿En qué hora se han producido más solicitudes al SAMUR?
+
+```{r}
+# Con nuestro nuevo dataframe ya teniendo una nueva columna de horas realizamos un group by y un conteopara obtener la hora con mas solicitudes
+df_time %>%
+  group_by(hora) %>% 
+  summarise(Solicitudes = n()) %>% 
+  arrange(desc(Solicitudes)) %>% 
+  head(1)
+```
+
+11. Muestra de forma gráfica el número de avisos por hora (Promedio mes).
+
+```{r}
+df_time$hora <- as.integer(df_time$hora)
+```
+
+```{r}
+# Agrupamos por mes y por hora y asi sacamos el promedio mensual de avisos con la funcion summarise
+datos <- df_time %>%
+  group_by(Año,Mes,  hora) %>% 
+  summarise(total_hora = n()) %>% 
+  summarise(media_mes=round(sum(total_hora)/24)) %>% 
+  arrange(desc(Mes)) 
+
+datos
+```
+```{r}
+# Teniendo nuestro dataframe utilizamos ggplot para graficar
+
+ggplot(datos, aes(fill=Año, y=media_mes, x=Mes)) + 
+    geom_bar(position="stack", stat="identity") +
+    theme_gray()
+
+
+```
+12. Muestra gráficamente los avisos recibidos para cada año en función de cada mes ¿Se aprecian las consecuencias de la pandemia del COVID-19 en las activaciones realizadas a lo largo de los años? (Recuerda que el confinamiento en España comenzó en marzo de 2020)
+
+```{r}
+# Agrupamos tanto por año como por mes y realizamos el conteo mensual
+datos1 <- df_new %>%
+  group_by(Mes, Año) %>% 
+  summarise(total_mes = n())
+
+# Realizando una grafica de lineas en ggplot
+ggplot(data=datos1, aes(x=Mes, y=total_mes, color =Año, group=Año)) +
+  geom_line()+
+  geom_point()+ 
+  theme_gray()
+ 
+```
+
+
+
